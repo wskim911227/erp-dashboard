@@ -25,4 +25,9 @@ export function isGeminiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
+/** 기본값: gemini-2.0-flash 종료(2026-06-01) 이후 권장 모델 */
+export function getGeminiModel(): string {
+  return process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+}
+
 export { VERCEL_ENV_HINT };

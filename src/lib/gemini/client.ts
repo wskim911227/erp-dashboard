@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { DashboardData } from "@/lib/analytics/kpis";
 import { ValidationSummary } from "@/lib/validation/integrity";
-import { getGeminiApiKey } from "@/lib/env";
+import { getGeminiApiKey, getGeminiModel } from "@/lib/env";
 
 function getClient() {
   return new GoogleGenerativeAI(getGeminiApiKey());
@@ -9,7 +9,7 @@ function getClient() {
 
 async function generateText(prompt: string): Promise<string> {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: getGeminiModel() });
   const result = await model.generateContent(prompt);
   return result.response.text();
 }
