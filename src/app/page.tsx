@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { TableName } from "@/lib/schemas/erp";
 import { parseCSVFile } from "@/lib/csv/parser";
-import { normalizeTable } from "@/lib/csv/normalize";
+import { detectTableFromFilename } from "@/lib/csv/normalize";
 import { checkMissingColumns } from "@/lib/validation/integrity";
 import { ValidationSummary } from "@/lib/validation/integrity";
 import { DashboardData } from "@/lib/analytics/kpis";
@@ -11,17 +11,9 @@ import FileUpload, { UploadStatus } from "@/components/FileUpload";
 import ValidationResults from "@/components/ValidationResults";
 import Dashboard from "@/components/Dashboard";
 import ReportGenerator from "@/components/ReportGenerator";
-import {
-  BarChart3,
-  ShieldCheck,
-  FileBarChart,
-  Loader2,
-  ChevronRight,
-} from "lucide-react";
+import { Sparkles, Loader2 } from "lucide-react";
 
 const ERP_TABLES: TableName[] = ["products", "customers", "orders", "order_details"];
-
-type Step = "upload" | "validation" | "dashboard" | "report";
 
 interface ERPData {
   products: Record<string, unknown>[];
@@ -30,40 +22,38 @@ interface ERPData {
   order_details: Record<string, unknown>[];
 }
 
-const STEPS: { id: Step; label: string; icon: React.ReactNode }[] = [
-  { id: "upload", label: "데이터 업로드", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "validation", label: "데이터 검증", icon: <ShieldCheck className="h-4 w-4" /> },
-  { id: "dashboard", label: "대시보드", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "report", label: "AI 보고서", icon: <FileBarChart className="h-4 w-4" /> },
-];
+type AnalysisPhase = "idle" | "running" | "done";
 
 export default function Home() {
-  const [step, setStep] = useState<Step>("upload");
   const [files, setFiles] = useState<Partial<Record<TableName, File>>>({});
   const [rowCounts, setRowCounts] = useState<Partial<Record<TableName, number>>>({});
   const [parseErrors, setParseErrors] = useState<Partial<Record<TableName, boolean>>>({});
-  const [erpData, setErpData] = useState<ERPData | null>(null);
+  const [phase, setPhase] = useState<AnalysisPhase>("idle");
+  const [progress, setProgress] = useState("");
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [validationInsights, setValidationInsights] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardInsights, setDashboardInsights] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const allFilesUploaded =
     !!files.products && !!files.customers && !!files.orders && !!files.order_details;
 
-  const handleFileSelect = useCallback(async (table: TableName, file: File) => {
+  const allFilesReady =
+    allFilesUploaded &&
+    ERP_TABLES.every((t) => !parseErrors[t] && (rowCounts[t] ?? 0) > 0);
+
+  const processFile = useCallback(async (table: TableName, file: File) => {
     setFiles((prev) => ({ ...prev, [table]: file }));
     try {
       const parsed = await parseCSVFile(file);
-
       setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
 
       if (parsed.rows.length === 0) {
         setParseErrors((prev) => ({ ...prev, [table]: true }));
-        setError(`${file.name}: 데이터 행이 없습니다. CSV 파일 내용을 확인해 주세요.`);
-        return;
+        setError(`${file.name}: 데이터 행이 없습니다.`);
+        return false;
       }
 
       const missing = checkMissingColumns(table, parsed.headers);
@@ -72,78 +62,97 @@ export default function Home() {
         setError(
           `${file.name} — 인식된 컬럼: [${parsed.headers.join(", ")}]. 매핑 불가: ${missing.join(", ")}`
         );
-        return;
+        return false;
       }
 
       setParseErrors((prev) => ({ ...prev, [table]: false }));
-      setError(null);
+      return true;
     } catch {
       setParseErrors((prev) => ({ ...prev, [table]: true }));
       setError(`${file.name} CSV 파싱 실패`);
       setRowCounts((prev) => ({ ...prev, [table]: 0 }));
+      return false;
     }
   }, []);
 
-  const allFilesReady =
-    allFilesUploaded &&
-    ERP_TABLES.every((t) => !parseErrors[t] && (rowCounts[t] ?? 0) > 0);
+  const handleFileSelect = useCallback(
+    async (table: TableName, file: File) => {
+      const ok = await processFile(table, file);
+      if (ok) setError(null);
+    },
+    [processFile]
+  );
+
+  const handleFilesDrop = useCallback(
+    async (droppedFiles: File[]) => {
+      const csvFiles = droppedFiles.filter((f) => f.name.toLowerCase().endsWith(".csv"));
+      if (csvFiles.length === 0) {
+        setError("CSV 파일만 업로드할 수 있습니다.");
+        return;
+      }
+
+      const unrecognized: string[] = [];
+      let successCount = 0;
+
+      for (const file of csvFiles) {
+        const table = detectTableFromFilename(file.name);
+        if (!table) {
+          unrecognized.push(file.name);
+          continue;
+        }
+        const ok = await processFile(table, file);
+        if (ok) successCount++;
+      }
+
+      if (unrecognized.length > 0) {
+        setError(`인식할 수 없는 파일: ${unrecognized.join(", ")}`);
+      } else if (successCount > 0) {
+        setError(null);
+      }
+    },
+    [processFile]
+  );
 
   async function loadAllData(): Promise<ERPData> {
-    const tables: TableName[] = ERP_TABLES;
     const data = {} as ERPData;
-    for (const table of tables) {
+    for (const table of ERP_TABLES) {
       const file = files[table];
       if (!file) throw new Error(`${table} 파일이 없습니다`);
       const parsed = await parseCSVFile(file);
-      data[table] = normalizeTable(table, parsed.rows);
+      data[table] = parsed.rows;
     }
     return data;
   }
 
-  async function handleValidate() {
-    setLoading(true);
+  async function handleFullAnalysis() {
+    setPhase("running");
     setError(null);
+    setProgress("데이터 검증 · 대시보드 · AI 보고서 생성 중...");
+    setValidation(null);
+    setDashboard(null);
+    setReport(null);
+
     try {
       const data = await loadAllData();
-      setErpData(data);
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "validate", data }),
+        body: JSON.stringify({ action: "full", data }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "검증 실패");
-      setValidation(json.validation);
-      setValidationInsights(json.aiInsights);
-      setStep("validation");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "검증 실패");
-    } finally {
-      setLoading(false);
-    }
-  }
+      if (!res.ok) throw new Error(json.error ?? "분석 실패");
 
-  async function handleDashboard() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = erpData ?? (await loadAllData());
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "insights", data }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "대시보드 생성 실패");
       setValidation(json.validation);
-      setDashboard(json.dashboard);
       setValidationInsights(json.validationInsights);
+      setDashboard(json.dashboard);
       setDashboardInsights(json.dashboardInsights);
-      setStep("dashboard");
+      setReport(json.report);
+      setPhase("done");
+      setProgress("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "대시보드 생성 실패");
-    } finally {
-      setLoading(false);
+      setError(e instanceof Error ? e.message : "분석 실패");
+      setPhase("idle");
+      setProgress("");
     }
   }
 
@@ -151,143 +160,72 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-          <h1 className="text-2xl font-bold text-slate-900">
-            ERP 데이터 분석 대시보드
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900">ERP 데이터 분석 대시보드</h1>
           <p className="mt-1 text-sm text-slate-500">
-            CSV 업로드 → Zod 검증 → KPI 대시보드 → Gemini AI 보고서
+            CSV 4개 업로드 → 검증 · 대시보드 · AI 보고서 원클릭 생성
           </p>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <nav className="mb-8 flex flex-wrap gap-2">
-          {STEPS.map((s, i) => {
-            const isActive = step === s.id;
-            const stepIndex = STEPS.findIndex((x) => x.id === step);
-            const thisIndex = STEPS.findIndex((x) => x.id === s.id);
-            const isDone = thisIndex < stepIndex;
-
-            return (
-              <button
-                key={s.id}
-                onClick={() => {
-                  if (s.id === "upload") setStep("upload");
-                  else if (s.id === "validation" && validation) setStep("validation");
-                  else if (s.id === "dashboard" && dashboard) setStep("dashboard");
-                  else if (s.id === "report" && dashboard) setStep("report");
-                }}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-md"
-                    : isDone
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-white text-slate-500"
-                }`}
-              >
-                {s.icon}
-                {s.label}
-                {i < STEPS.length - 1 && <ChevronRight className="h-3 w-3 opacity-50" />}
-              </button>
-            );
-          })}
-        </nav>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">ERP CSV 파일 업로드</h2>
+          <FileUpload
+            files={files}
+            onFileSelect={handleFileSelect}
+            onFilesDrop={handleFilesDrop}
+            rowCounts={rowCounts}
+            parseErrors={parseErrors}
+          />
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+            <UploadStatus files={files} />
+            <button
+              onClick={handleFullAnalysis}
+              disabled={!allFilesReady || phase === "running"}
+              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:from-blue-700 hover:to-violet-700 disabled:opacity-50"
+            >
+              {phase === "running" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              전체 분석 시작
+            </button>
+          </div>
+          {progress && (
+            <p className="mt-4 text-center text-sm text-blue-600">{progress}</p>
+          )}
+        </section>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        {step === "upload" && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-slate-800">
-                ERP CSV 파일 업로드
-              </h2>
-              <FileUpload
-                files={files}
-                onFileSelect={handleFileSelect}
-                rowCounts={rowCounts}
-                parseErrors={parseErrors}
-              />
-              <div className="mt-6 flex items-center justify-between">
-                <UploadStatus files={files} />
-                <button
-                  onClick={handleValidate}
-                  disabled={!allFilesReady || loading}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4" />
-                  )}
-                  데이터 검증 시작
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step === "validation" && validation && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {phase === "done" && validation && (
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="mb-6 text-lg font-semibold text-slate-800">
                 1. 데이터 검증 (Zod + 참조 무결성)
               </h2>
               <ValidationResults validation={validation} aiInsights={validationInsights} />
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={handleDashboard}
-                  disabled={loading}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <BarChart3 className="h-4 w-4" />
-                  )}
-                  대시보드 생성
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
+            </section>
 
-        {step === "dashboard" && dashboard && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-6 text-lg font-semibold text-slate-800">
-                2. KPI 대시보드
-              </h2>
-              <Dashboard data={dashboard} aiInsights={dashboardInsights} />
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setStep("report")}
-                  className="flex items-center gap-2 rounded-lg bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
-                >
-                  <FileBarChart className="h-4 w-4" />
-                  AI 보고서 작성
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
+            {dashboard && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-6 text-lg font-semibold text-slate-800">2. KPI 대시보드</h2>
+                <Dashboard data={dashboard} aiInsights={dashboardInsights} />
+              </section>
+            )}
 
-        {step === "report" && dashboard && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-6 text-lg font-semibold text-slate-800">
-                3. AI 보고서 생성 (Gemini)
-              </h2>
-              <ReportGenerator
-                dashboard={dashboard}
-                validationInsights={validationInsights ?? ""}
-                dashboardInsights={dashboardInsights ?? ""}
-              />
-            </div>
-          </section>
+            {dashboard && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-6 text-lg font-semibold text-slate-800">
+                  3. AI 보고서 (Gemini)
+                </h2>
+                <ReportGenerator dashboard={dashboard} report={report} />
+              </section>
+            )}
+          </div>
         )}
       </div>
     </div>

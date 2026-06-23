@@ -165,6 +165,34 @@ export function normalizeTable(
   });
 }
 
+export function normalizeERPData(data: {
+  products: Record<string, unknown>[];
+  customers: Record<string, unknown>[];
+  orders: Record<string, unknown>[];
+  order_details: Record<string, unknown>[];
+}) {
+  return {
+    products: normalizeTable("products", data.products),
+    customers: normalizeTable("customers", data.customers),
+    orders: normalizeTable("orders", data.orders),
+    order_details: normalizeTable("order_details", data.order_details),
+  };
+}
+
+/** 파일명으로 ERP 테이블 자동 매칭 */
+export function detectTableFromFilename(filename: string): TableName | null {
+  const name = filename.toLowerCase().replace(/\.csv$/, "");
+
+  if (/sales_order_items?|order_items?|order_details?/.test(name)) {
+    return "order_details";
+  }
+  if (/sales_orders?/.test(name)) return "orders";
+  if (/^orders?$/.test(name)) return "orders";
+  if (/products?/.test(name)) return "products";
+  if (/customers?/.test(name)) return "customers";
+  return null;
+}
+
 export const ACCEPTED_FILE_HINTS: Record<TableName, string> = {
   products: "products.csv",
   customers: "customers.csv",
