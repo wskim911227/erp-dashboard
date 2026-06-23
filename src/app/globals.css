@@ -17,7 +17,7 @@ body {
 }
 
 .pixel-ground {
-  height: 6px;
+  height: 10px;
   background: repeating-linear-gradient(
     90deg,
     #65a30d 0px,
@@ -26,6 +26,11 @@ body {
     #4d7c0f 16px
   );
   border-top: 2px solid #365314;
+}
+
+.pixel-cat-svg {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
 }
 
 .pixel-cloud {
@@ -56,55 +61,5 @@ body {
   to {
     transform: translateX(40px);
   }
-}
-
-/* 16x16 픽셀 고양이 — box-shadow 픽셀 아트 */
-.pixel-cat {
-  width: 4px;
-  height: 4px;
-  position: relative;
-  image-rendering: pixelated;
-  transform: scale(1.8);
-  transform-origin: bottom center;
-}
-
-.pixel-cat-run-1 {
-  color: #f97316;
-  box-shadow:
-    4px 0 0 0 #f97316,
-    8px 0 0 0 #f97316,
-    12px 0 0 0 #f97316,
-    0 4px 0 0 #f97316,
-    4px 4px 0 0 #fdba74,
-    8px 4px 0 0 #f97316,
-    12px 4px 0 0 #f97316,
-    16px 4px 0 0 #f97316,
-    0 8px 0 0 #ea580c,
-    4px 8px 0 0 #1e293b,
-    8px 8px 0 0 #1e293b,
-    12px 8px 0 0 #f97316,
-    4px 12px 0 0 #ea580c,
-    8px 12px 0 0 #ea580c,
-    12px 12px 0 0 #ea580c;
-}
-
-.pixel-cat-run-2 {
-  color: #f97316;
-  box-shadow:
-    4px 0 0 0 #f97316,
-    8px 0 0 0 #f97316,
-    12px 0 0 0 #f97316,
-    0 4px 0 0 #f97316,
-    4px 4px 0 0 #fdba74,
-    8px 4px 0 0 #f97316,
-    12px 4px 0 0 #f97316,
-    16px 4px 0 0 #f97316,
-    0 8px 0 0 #f97316,
-    4px 8px 0 0 #1e293b,
-    8px 8px 0 0 #1e293b,
-    12px 8px 0 0 #f97316,
-    0 12px 0 0 #ea580c,
-    8px 12px 0 0 #ea580c,
-    16px 12px 0 0 #ea580c;
 }
 

@@ -58,21 +58,24 @@ export default function AnalysisLoader({ stage, percent }: AnalysisLoaderProps) 
           {STAGE_LABELS[stage]}
         </p>
 
-        <div className="pixel-progress-track relative h-12 overflow-hidden rounded-lg border-4 border-slate-800 bg-sky-300">
-          <div className="pixel-cloud pixel-cloud-1" />
-          <div className="pixel-cloud pixel-cloud-2" />
-          <div
-            className="absolute bottom-0 left-0 top-0 bg-emerald-400/60 transition-all duration-700 ease-out"
-            style={{ width: `${clamped}%` }}
-          />
-          <div className="pixel-ground absolute bottom-0 left-0 right-0" />
-          <div
-            className="absolute bottom-1 z-10 transition-all duration-700 ease-out"
-            style={{ left: `calc(${Math.max(4, clamped)}% - 24px)` }}
-          >
+        <div className="pixel-progress-track relative h-20 overflow-visible rounded-lg border-4 border-slate-800 bg-sky-300">
+          <div className="absolute inset-0 overflow-hidden rounded-[4px]">
+            <div className="pixel-cloud pixel-cloud-1" />
+            <div className="pixel-cloud pixel-cloud-2" />
             <div
-              className={`pixel-cat ${frame === 0 ? "pixel-cat-run-1" : "pixel-cat-run-2"}`}
+              className="absolute bottom-0 left-0 top-0 bg-emerald-400/50 transition-all duration-700 ease-out"
+              style={{ width: `${clamped}%` }}
             />
+            <div className="pixel-ground absolute bottom-0 left-0 right-0" />
+          </div>
+          <div
+            className="absolute z-20 transition-all duration-700 ease-out"
+            style={{
+              left: `calc(${Math.max(2, clamped)}% - 28px)`,
+              bottom: "10px",
+            }}
+          >
+            <PixelCatSprite frame={frame} />
           </div>
         </div>
 
@@ -97,5 +100,56 @@ export default function AnalysisLoader({ stage, percent }: AnalysisLoaderProps) 
         </div>
       </div>
     </div>
+  );
+}
+
+/** SVG 픽셀 고양이 (2프레임 달리기) */
+function PixelCatSprite({ frame }: { frame: 0 | 1 }) {
+  const legFrame1 = (
+    <>
+      <rect x="10" y="22" width="4" height="4" fill="#c2410c" />
+      <rect x="18" y="22" width="4" height="4" fill="#c2410c" />
+      <rect x="6" y="26" width="4" height="4" fill="#c2410c" />
+      <rect x="22" y="26" width="4" height="4" fill="#c2410c" />
+    </>
+  );
+  const legFrame2 = (
+    <>
+      <rect x="8" y="22" width="4" height="4" fill="#c2410c" />
+      <rect x="20" y="22" width="4" height="4" fill="#c2410c" />
+      <rect x="14" y="26" width="4" height="4" fill="#c2410c" />
+    </>
+  );
+
+  return (
+    <svg
+      width="56"
+      height="56"
+      viewBox="0 0 32 32"
+      className="pixel-cat-svg drop-shadow-md"
+      aria-hidden
+    >
+      {/* 꼬리 */}
+      <rect x="2" y="12" width="4" height="4" fill="#ea580c" />
+      <rect x="0" y="8" width="4" height="4" fill="#f97316" />
+      {/* 몸통 */}
+      <rect x="6" y="12" width="20" height="12" fill="#f97316" />
+      <rect x="8" y="14" width="16" height="8" fill="#fdba74" />
+      {/* 머리 */}
+      <rect x="20" y="4" width="12" height="12" fill="#f97316" />
+      <rect x="22" y="6" width="8" height="8" fill="#fdba74" />
+      {/* 귀 */}
+      <rect x="20" y="0" width="4" height="4" fill="#f97316" />
+      <rect x="28" y="0" width="4" height="4" fill="#f97316" />
+      <rect x="21" y="1" width="2" height="2" fill="#fda4af" />
+      <rect x="29" y="1" width="2" height="2" fill="#fda4af" />
+      {/* 눈 */}
+      <rect x="24" y="8" width="2" height="2" fill="#1e293b" />
+      <rect x="28" y="8" width="2" height="2" fill="#1e293b" />
+      {/* 코 */}
+      <rect x="26" y="11" width="2" height="2" fill="#fda4af" />
+      {/* 다리 */}
+      {frame === 0 ? legFrame1 : legFrame2}
+    </svg>
   );
 }
