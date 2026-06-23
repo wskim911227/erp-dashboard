@@ -10,20 +10,40 @@ CSV 파일 4개(상품, 고객, 주문, 주문상세)를 업로드하면 Zod 스
 
 ## 시작하기
 
+### Vercel 배포 (권장)
+
+1. [Vercel](https://vercel.com)에서 GitHub 저장소 `erp-dashboard` 연결
+2. **Settings → Environment Variables** 에서 아래 변수 등록
+
+| Key | Value | Environment |
+|-----|-------|-------------|
+| `GEMINI_API_KEY` | Google AI Studio API 키 | Production, Preview, Development |
+
+3. **Redeploy** 후 접속
+
+> API 키는 서버에서만 사용됩니다 (`NEXT_PUBLIC_` 접두사 없음). 클라이언트에 노출되지 않습니다.
+
+### 로컬 개발
+
 ```bash
 npm install
-cp .env.example .env.local
-# .env.local에 GEMINI_API_KEY 설정
+npm i -g vercel        # Vercel CLI (최초 1회)
+vercel link            # 프로젝트 연결
+vercel env pull .env.local   # Vercel 환경변수를 로컬로 동기화
 npm run dev
 ```
 
 브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
 
-## Vercel 배포
+## Vercel 환경변수 등록 방법
 
-1. GitHub에 푸시 후 Vercel에 연결
-2. 환경변수 `GEMINI_API_KEY` 등록
-3. Deploy
+1. Vercel 대시보드 → 프로젝트 선택
+2. **Settings** → **Environment Variables**
+3. **Add New** 클릭
+   - **Key:** `GEMINI_API_KEY`
+   - **Value:** [Google AI Studio](https://aistudio.google.com/apikey)에서 발급한 API 키
+   - **Environments:** Production, Preview, Development 모두 선택
+4. **Save** 후 **Deployments** → 최신 배포 **Redeploy**
 
 ## CSV 파일 형식
 

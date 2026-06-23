@@ -5,6 +5,7 @@ import {
   geminiValidateInsights,
   geminiDashboardInsights,
 } from "@/lib/gemini/client";
+import { isGeminiConfigured, VERCEL_ENV_HINT } from "@/lib/env";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,10 +31,14 @@ export async function POST(request: NextRequest) {
 
     if (action === "validate") {
       let aiInsights: string | null = null;
-      try {
-        aiInsights = await geminiValidateInsights(validation);
-      } catch {
-        aiInsights = "GEMINI_API_KEY가 설정되지 않아 AI 분석을 건너뜁니다.";
+      if (isGeminiConfigured()) {
+        try {
+          aiInsights = await geminiValidateInsights(validation);
+        } catch (e) {
+          aiInsights = e instanceof Error ? e.message : "AI 분석 실패";
+        }
+      } else {
+        aiInsights = `AI 분석을 사용할 수 없습니다. ${VERCEL_ENV_HINT}`;
       }
       return NextResponse.json({ validation, aiInsights });
     }
