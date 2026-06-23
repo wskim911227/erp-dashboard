@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TableName } from "@/lib/schemas/erp";
 import { parseCSVFile } from "@/lib/csv/parser";
 import { detectTableFromFilename } from "@/lib/csv/normalize";
@@ -11,7 +11,8 @@ import FileUpload, { UploadStatus } from "@/components/FileUpload";
 import ValidationResults from "@/components/ValidationResults";
 import Dashboard from "@/components/Dashboard";
 import ReportGenerator from "@/components/ReportGenerator";
-import { Sparkles, Loader2, Database } from "lucide-react";
+import AnalysisLoader, { ProgressStage } from "@/components/AnalysisLoader";
+import { Sparkles, Database } from "lucide-react";
 
 const ERP_TABLES: TableName[] = ["products", "customers", "orders", "order_details"];
 
@@ -36,13 +37,15 @@ export default function Home() {
   const [rowCounts, setRowCounts] = useState<Partial<Record<TableName, number>>>({});
   const [parseErrors, setParseErrors] = useState<Partial<Record<TableName, boolean>>>({});
   const [phase, setPhase] = useState<AnalysisPhase>("idle");
-  const [progress, setProgress] = useState("");
+  const [progressStage, setProgressStage] = useState<ProgressStage>("validating");
+  const [progressPercent, setProgressPercent] = useState(0);
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [validationInsights, setValidationInsights] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardInsights, setDashboardInsights] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const allFilesUploaded =
     !!files.products && !!files.customers && !!files.orders && !!files.order_details;
@@ -50,6 +53,30 @@ export default function Home() {
   const allFilesReady =
     allFilesUploaded &&
     ERP_TABLES.every((t) => !parseErrors[t] && (rowCounts[t] ?? 0) > 0);
+
+  const stopProgressTicker = useCallback(() => {
+    if (progressTimer.current) {
+      clearInterval(progressTimer.current);
+      progressTimer.current = null;
+    }
+  }, []);
+
+  const startProgressTicker = useCallback(
+    (from: number, to: number, stage: ProgressStage) => {
+      stopProgressTicker();
+      setProgressStage(stage);
+      setProgressPercent(from);
+      progressTimer.current = setInterval(() => {
+        setProgressPercent((prev) => {
+          if (prev >= to - 1) return prev;
+          return prev + 1;
+        });
+      }, 400);
+    },
+    [stopProgressTicker]
+  );
+
+  useEffect(() => () => stopProgressTicker(), [stopProgressTicker]);
 
   const processFile = useCallback(async (table: TableName, file: File) => {
     setFiles((prev) => ({ ...prev, [table]: file }));
@@ -123,31 +150,61 @@ export default function Home() {
   async function runFullAnalysis(data: ERPData) {
     setPhase("running");
     setError(null);
-    setProgress("데이터 검증 · 대시보드 · AI 보고서 생성 중...");
     setValidation(null);
     setDashboard(null);
     setReport(null);
+    setProgressStage("validating");
+    setProgressPercent(5);
+    startProgressTicker(5, 25, "validating");
 
     try {
-      const res = await fetch("/api/analyze", {
+      const insightsRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "full", data }),
+        body: JSON.stringify({ action: "insights", data }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "분석 실패");
+      const insightsJson = await insightsRes.json();
+      if (!insightsRes.ok) throw new Error(insightsJson.error ?? "분석 실패");
 
-      setValidation(json.validation);
-      setValidationInsights(json.validationInsights);
-      setDashboard(json.dashboard);
-      setDashboardInsights(json.dashboardInsights);
-      setReport(json.report);
+      stopProgressTicker();
+      setProgressStage("dashboard");
+      setProgressPercent(50);
+      setValidation(insightsJson.validation);
+      setValidationInsights(insightsJson.validationInsights);
+      setDashboard(insightsJson.dashboard);
+      setDashboardInsights(insightsJson.dashboardInsights);
+
+      startProgressTicker(50, 75, "ai_insights");
+
+      const reportRes = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dashboard: insightsJson.dashboard,
+          validationInsights: insightsJson.validationInsights,
+          dashboardInsights: insightsJson.dashboardInsights,
+        }),
+      });
+      const reportJson = await reportRes.json();
+      if (!reportRes.ok) throw new Error(reportJson.error ?? "보고서 생성 실패");
+
+      stopProgressTicker();
+      setProgressStage("ai_report");
+      setProgressPercent(90);
+      setReport(reportJson.report);
+
+      setProgressStage("done");
+      setProgressPercent(100);
       setPhase("done");
-      setProgress("");
+
+      setTimeout(() => {
+        setProgressPercent(0);
+      }, 800);
     } catch (e) {
+      stopProgressTicker();
       setError(e instanceof Error ? e.message : "분석 실패");
       setPhase("idle");
-      setProgress("");
+      setProgressPercent(0);
     }
   }
 
@@ -170,12 +227,15 @@ export default function Home() {
   async function handleLoadSampleData() {
     setPhase("running");
     setError(null);
-    setProgress("샘플 데이터 불러오는 중...");
+    setProgressStage("loading_sample");
+    setProgressPercent(0);
     setValidation(null);
     setDashboard(null);
     setReport(null);
 
     try {
+      startProgressTicker(0, 15, "loading_sample");
+
       const res = await fetch("/api/sample-data");
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "샘플 데이터 로드 실패");
@@ -183,7 +243,8 @@ export default function Home() {
       const sampleFiles = {} as Record<TableName, File>;
       const data = {} as ERPData;
 
-      for (const table of ERP_TABLES) {
+      for (let i = 0; i < ERP_TABLES.length; i++) {
+        const table = ERP_TABLES[i];
         const { filename, content } = json.files[table];
         const file = new File([content], filename || SAMPLE_FILE_NAMES[table], {
           type: "text/csv",
@@ -194,14 +255,17 @@ export default function Home() {
         data[table] = parsed.rows;
         setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
         setParseErrors((prev) => ({ ...prev, [table]: false }));
+        setProgressPercent(3 + (i + 1) * 3);
       }
 
       setFiles(sampleFiles);
+      stopProgressTicker();
       await runFullAnalysis(data);
     } catch (e) {
+      stopProgressTicker();
       setError(e instanceof Error ? e.message : "샘플 데이터 로드 실패");
       setPhase("idle");
-      setProgress("");
+      setProgressPercent(0);
     }
   }
 
@@ -234,11 +298,7 @@ export default function Home() {
                 disabled={phase === "running"}
                 className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
-                {phase === "running" && progress.includes("샘플") ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4" />
-                )}
+                <Database className="h-4 w-4" />
                 샘플 데이터 불러오기
               </button>
               <button
@@ -246,19 +306,16 @@ export default function Home() {
                 disabled={!allFilesReady || phase === "running"}
                 className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:from-blue-700 hover:to-violet-700 disabled:opacity-50"
               >
-                {phase === "running" && !progress.includes("샘플") ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
+                <Sparkles className="h-4 w-4" />
                 전체 분석 시작
               </button>
             </div>
           </div>
-          {progress && (
-            <p className="mt-4 text-center text-sm text-blue-600">{progress}</p>
-          )}
         </section>
+
+        {phase === "running" && (
+          <AnalysisLoader stage={progressStage} percent={progressPercent} />
+        )}
 
         {error && (
           <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
