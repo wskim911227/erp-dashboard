@@ -96,6 +96,8 @@ npm run dev
 | sales_orders.csv | 5,000 |
 | sales_order_items.csv | 14,974 |
 
+**샘플 데이터 불러오기** 버튼을 누르면 위 4개 파일을 자동 로드하고 전체 분석이 바로 시작됩니다.
+
 ## 기술 스택
 
 - Next.js 15, TypeScript, Tailwind CSS

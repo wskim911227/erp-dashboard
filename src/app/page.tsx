@@ -11,9 +11,16 @@ import FileUpload, { UploadStatus } from "@/components/FileUpload";
 import ValidationResults from "@/components/ValidationResults";
 import Dashboard from "@/components/Dashboard";
 import ReportGenerator from "@/components/ReportGenerator";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Database } from "lucide-react";
 
 const ERP_TABLES: TableName[] = ["products", "customers", "orders", "order_details"];
+
+const SAMPLE_FILE_NAMES: Record<TableName, string> = {
+  products: "products.csv",
+  customers: "customers.csv",
+  orders: "sales_orders.csv",
+  order_details: "sales_order_items.csv",
+};
 
 interface ERPData {
   products: Record<string, unknown>[];
@@ -113,18 +120,7 @@ export default function Home() {
     [processFile]
   );
 
-  async function loadAllData(): Promise<ERPData> {
-    const data = {} as ERPData;
-    for (const table of ERP_TABLES) {
-      const file = files[table];
-      if (!file) throw new Error(`${table} 파일이 없습니다`);
-      const parsed = await parseCSVFile(file);
-      data[table] = parsed.rows;
-    }
-    return data;
-  }
-
-  async function handleFullAnalysis() {
+  async function runFullAnalysis(data: ERPData) {
     setPhase("running");
     setError(null);
     setProgress("데이터 검증 · 대시보드 · AI 보고서 생성 중...");
@@ -133,7 +129,6 @@ export default function Home() {
     setReport(null);
 
     try {
-      const data = await loadAllData();
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,6 +146,60 @@ export default function Home() {
       setProgress("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "분석 실패");
+      setPhase("idle");
+      setProgress("");
+    }
+  }
+
+  async function loadAllData(): Promise<ERPData> {
+    const data = {} as ERPData;
+    for (const table of ERP_TABLES) {
+      const file = files[table];
+      if (!file) throw new Error(`${table} 파일이 없습니다`);
+      const parsed = await parseCSVFile(file);
+      data[table] = parsed.rows;
+    }
+    return data;
+  }
+
+  async function handleFullAnalysis() {
+    const data = await loadAllData();
+    await runFullAnalysis(data);
+  }
+
+  async function handleLoadSampleData() {
+    setPhase("running");
+    setError(null);
+    setProgress("샘플 데이터 불러오는 중...");
+    setValidation(null);
+    setDashboard(null);
+    setReport(null);
+
+    try {
+      const res = await fetch("/api/sample-data");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "샘플 데이터 로드 실패");
+
+      const sampleFiles = {} as Record<TableName, File>;
+      const data = {} as ERPData;
+
+      for (const table of ERP_TABLES) {
+        const { filename, content } = json.files[table];
+        const file = new File([content], filename || SAMPLE_FILE_NAMES[table], {
+          type: "text/csv",
+        });
+        sampleFiles[table] = file;
+
+        const parsed = await parseCSVFile(file);
+        data[table] = parsed.rows;
+        setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
+        setParseErrors((prev) => ({ ...prev, [table]: false }));
+      }
+
+      setFiles(sampleFiles);
+      await runFullAnalysis(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "샘플 데이터 로드 실패");
       setPhase("idle");
       setProgress("");
     }
@@ -179,18 +228,32 @@ export default function Home() {
           />
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
             <UploadStatus files={files} />
-            <button
-              onClick={handleFullAnalysis}
-              disabled={!allFilesReady || phase === "running"}
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:from-blue-700 hover:to-violet-700 disabled:opacity-50"
-            >
-              {phase === "running" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              전체 분석 시작
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleLoadSampleData}
+                disabled={phase === "running"}
+                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {phase === "running" && progress.includes("샘플") ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="h-4 w-4" />
+                )}
+                샘플 데이터 불러오기
+              </button>
+              <button
+                onClick={handleFullAnalysis}
+                disabled={!allFilesReady || phase === "running"}
+                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:from-blue-700 hover:to-violet-700 disabled:opacity-50"
+              >
+                {phase === "running" && !progress.includes("샘플") ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                전체 분석 시작
+              </button>
+            </div>
           </div>
           {progress && (
             <p className="mt-4 text-center text-sm text-blue-600">{progress}</p>
