@@ -40,7 +40,7 @@ export async function parseCSVFile(file: File): Promise<ParsedCSV> {
 
         resolve({ headers, rows });
       },
-      error: (error) => reject(error),
+      error: (error: Error) => reject(error),
     });
   });
 }
