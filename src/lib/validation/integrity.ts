@@ -6,8 +6,8 @@ import {
   TableName,
   TABLE_LABELS,
   ERP_SCHEMAS,
-  REQUIRED_COLUMNS,
 } from "@/lib/schemas/erp";
+import { checkColumnsResolvable } from "@/lib/csv/normalize";
 
 export interface RowError {
   row: number;
@@ -218,8 +218,5 @@ export function checkMissingColumns(
   table: TableName,
   headers: string[]
 ): string[] {
-  const normalized = headers.map((h) => h.trim().toLowerCase());
-  return REQUIRED_COLUMNS[table].filter(
-    (col) => !normalized.includes(col.toLowerCase())
-  );
+  return checkColumnsResolvable(table, headers).missing;
 }

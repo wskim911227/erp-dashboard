@@ -11,7 +11,7 @@ export function parseCSVFile(file: File): Promise<ParsedCSV> {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => h.trim(),
+      transformHeader: (h) => h.replace(/^\uFEFF/, "").trim(),
       complete: (results) => {
         const headers = results.meta.fields ?? [];
         const rows = results.data.map((row) => {
@@ -36,8 +36,8 @@ export const TABLE_FILE_KEYS: Record<TableName, string> = {
 };
 
 export const TABLE_FILE_LABELS: Record<TableName, string> = {
-  products: "상품 (products.csv)",
-  customers: "고객 (customers.csv)",
-  orders: "주문 (orders.csv)",
-  order_details: "주문상세 (order_details.csv)",
+  products: "상품",
+  customers: "고객",
+  orders: "주문",
+  order_details: "주문상세",
 };

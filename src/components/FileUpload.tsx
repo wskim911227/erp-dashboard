@@ -2,6 +2,7 @@
 
 import { TableName } from "@/lib/schemas/erp";
 import { TABLE_FILE_LABELS } from "@/lib/csv/parser";
+import { ACCEPTED_FILE_HINTS } from "@/lib/csv/normalize";
 import { Upload, CheckCircle, AlertCircle, FileText } from "lucide-react";
 
 interface FileUploadProps {
@@ -45,6 +46,9 @@ export default function FileUpload({ files, onFileSelect, rowCounts }: FileUploa
             )}
             <span className="text-sm font-semibold text-slate-700">
               {TABLE_FILE_LABELS[table]}
+            </span>
+            <span className="mt-0.5 text-xs text-slate-400">
+              {ACCEPTED_FILE_HINTS[table]}
             </span>
             {uploaded && (
               <span className="mt-1 flex items-center gap-1 text-xs text-emerald-600">

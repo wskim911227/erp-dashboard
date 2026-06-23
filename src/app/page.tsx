@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { TableName } from "@/lib/schemas/erp";
 import { parseCSVFile } from "@/lib/csv/parser";
+import { normalizeTable, ACCEPTED_FILE_HINTS } from "@/lib/csv/normalize";
 import { checkMissingColumns } from "@/lib/validation/integrity";
 import { ValidationSummary } from "@/lib/validation/integrity";
 import { DashboardData } from "@/lib/analytics/kpis";
@@ -55,7 +56,9 @@ export default function Home() {
       const parsed = await parseCSVFile(file);
       const missing = checkMissingColumns(table, parsed.headers);
       if (missing.length > 0) {
-        setError(`${table} 테이블에 필수 컬럼이 없습니다: ${missing.join(", ")}`);
+        setError(
+          `${ACCEPTED_FILE_HINTS[table]} — 매핑 가능한 컬럼이 없습니다: ${missing.join(", ")}`
+        );
         return;
       }
       setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
@@ -72,7 +75,7 @@ export default function Home() {
       const file = files[table];
       if (!file) throw new Error(`${table} 파일이 없습니다`);
       const parsed = await parseCSVFile(file);
-      data[table] = parsed.rows;
+      data[table] = normalizeTable(table, parsed.rows);
     }
     return data;
   }
