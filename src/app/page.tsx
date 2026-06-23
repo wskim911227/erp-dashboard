@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { TableName } from "@/lib/schemas/erp";
 import { parseCSVFile } from "@/lib/csv/parser";
-import { normalizeTable, ACCEPTED_FILE_HINTS } from "@/lib/csv/normalize";
+import { normalizeTable } from "@/lib/csv/normalize";
 import { checkMissingColumns } from "@/lib/validation/integrity";
 import { ValidationSummary } from "@/lib/validation/integrity";
 import { DashboardData } from "@/lib/analytics/kpis";
@@ -18,6 +18,8 @@ import {
   Loader2,
   ChevronRight,
 } from "lucide-react";
+
+const ERP_TABLES: TableName[] = ["products", "customers", "orders", "order_details"];
 
 type Step = "upload" | "validation" | "dashboard" | "report";
 
@@ -39,6 +41,7 @@ export default function Home() {
   const [step, setStep] = useState<Step>("upload");
   const [files, setFiles] = useState<Partial<Record<TableName, File>>>({});
   const [rowCounts, setRowCounts] = useState<Partial<Record<TableName, number>>>({});
+  const [parseErrors, setParseErrors] = useState<Partial<Record<TableName, boolean>>>({});
   const [erpData, setErpData] = useState<ERPData | null>(null);
   const [validation, setValidation] = useState<ValidationSummary | null>(null);
   const [validationInsights, setValidationInsights] = useState<string | null>(null);
@@ -54,22 +57,39 @@ export default function Home() {
     setFiles((prev) => ({ ...prev, [table]: file }));
     try {
       const parsed = await parseCSVFile(file);
+
+      setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
+
+      if (parsed.rows.length === 0) {
+        setParseErrors((prev) => ({ ...prev, [table]: true }));
+        setError(`${file.name}: 데이터 행이 없습니다. CSV 파일 내용을 확인해 주세요.`);
+        return;
+      }
+
       const missing = checkMissingColumns(table, parsed.headers);
       if (missing.length > 0) {
+        setParseErrors((prev) => ({ ...prev, [table]: true }));
         setError(
-          `${ACCEPTED_FILE_HINTS[table]} — 매핑 가능한 컬럼이 없습니다: ${missing.join(", ")}`
+          `${file.name} — 인식된 컬럼: [${parsed.headers.join(", ")}]. 매핑 불가: ${missing.join(", ")}`
         );
         return;
       }
-      setRowCounts((prev) => ({ ...prev, [table]: parsed.rows.length }));
+
+      setParseErrors((prev) => ({ ...prev, [table]: false }));
       setError(null);
     } catch {
-      setError(`${table} CSV 파싱 실패`);
+      setParseErrors((prev) => ({ ...prev, [table]: true }));
+      setError(`${file.name} CSV 파싱 실패`);
+      setRowCounts((prev) => ({ ...prev, [table]: 0 }));
     }
   }, []);
 
+  const allFilesReady =
+    allFilesUploaded &&
+    ERP_TABLES.every((t) => !parseErrors[t] && (rowCounts[t] ?? 0) > 0);
+
   async function loadAllData(): Promise<ERPData> {
-    const tables: TableName[] = ["products", "customers", "orders", "order_details"];
+    const tables: TableName[] = ERP_TABLES;
     const data = {} as ERPData;
     for (const table of tables) {
       const file = files[table];
@@ -185,12 +205,17 @@ export default function Home() {
               <h2 className="mb-4 text-lg font-semibold text-slate-800">
                 ERP CSV 파일 업로드
               </h2>
-              <FileUpload files={files} onFileSelect={handleFileSelect} rowCounts={rowCounts} />
+              <FileUpload
+                files={files}
+                onFileSelect={handleFileSelect}
+                rowCounts={rowCounts}
+                parseErrors={parseErrors}
+              />
               <div className="mt-6 flex items-center justify-between">
                 <UploadStatus files={files} />
                 <button
                   onClick={handleValidate}
-                  disabled={!allFilesUploaded || loading}
+                  disabled={!allFilesReady || loading}
                   className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
                 >
                   {loading ? (

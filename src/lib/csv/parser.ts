@@ -6,21 +6,38 @@ export interface ParsedCSV {
   rows: Record<string, unknown>[];
 }
 
-export function parseCSVFile(file: File): Promise<ParsedCSV> {
+function normalizeHeader(header: string): string {
+  return header.replace(/^\uFEFF/, "").trim();
+}
+
+function isNonEmptyRow(row: Record<string, string>): boolean {
+  return Object.values(row).some((v) => String(v ?? "").trim() !== "");
+}
+
+export async function parseCSVFile(file: File): Promise<ParsedCSV> {
+  const text = await file.text();
+
+  if (!text.trim()) {
+    return { headers: [], rows: [] };
+  }
+
   return new Promise((resolve, reject) => {
-    Papa.parse<Record<string, string>>(file, {
+    Papa.parse<Record<string, string>>(text, {
       header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.replace(/^\uFEFF/, "").trim(),
+      skipEmptyLines: "greedy",
+      transformHeader: normalizeHeader,
       complete: (results) => {
-        const headers = results.meta.fields ?? [];
-        const rows = results.data.map((row) => {
-          const normalized: Record<string, unknown> = {};
-          Object.entries(row).forEach(([key, value]) => {
-            normalized[key.trim()] = value?.trim() ?? "";
+        const headers = (results.meta.fields ?? []).map(normalizeHeader);
+        const rows = results.data
+          .filter(isNonEmptyRow)
+          .map((row) => {
+            const normalized: Record<string, unknown> = {};
+            Object.entries(row).forEach(([key, value]) => {
+              normalized[normalizeHeader(key)] = String(value ?? "").trim();
+            });
+            return normalized;
           });
-          return normalized;
-        });
+
         resolve({ headers, rows });
       },
       error: (error) => reject(error),

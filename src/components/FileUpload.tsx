@@ -9,25 +9,30 @@ interface FileUploadProps {
   files: Partial<Record<TableName, File>>;
   onFileSelect: (table: TableName, file: File) => void;
   rowCounts: Partial<Record<TableName, number>>;
+  parseErrors: Partial<Record<TableName, boolean>>;
 }
 
 const TABLES: TableName[] = ["products", "customers", "orders", "order_details"];
 
-export default function FileUpload({ files, onFileSelect, rowCounts }: FileUploadProps) {
+export default function FileUpload({ files, onFileSelect, rowCounts, parseErrors }: FileUploadProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {TABLES.map((table) => {
         const file = files[table];
         const count = rowCounts[table];
         const uploaded = !!file;
+        const hasError = parseErrors[table];
+        const isReady = uploaded && !hasError && (count ?? 0) > 0;
 
         return (
           <label
             key={table}
             className={`relative flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed p-6 transition-colors ${
-              uploaded
+              isReady
                 ? "border-emerald-400 bg-emerald-50"
-                : "border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50"
+                : uploaded
+                  ? "border-amber-400 bg-amber-50"
+                  : "border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50"
             }`}
           >
             <input
@@ -39,8 +44,10 @@ export default function FileUpload({ files, onFileSelect, rowCounts }: FileUploa
                 if (f) onFileSelect(table, f);
               }}
             />
-            {uploaded ? (
+            {isReady ? (
               <CheckCircle className="mb-2 h-8 w-8 text-emerald-500" />
+            ) : uploaded ? (
+              <AlertCircle className="mb-2 h-8 w-8 text-amber-500" />
             ) : (
               <Upload className="mb-2 h-8 w-8 text-slate-400" />
             )}
@@ -51,7 +58,11 @@ export default function FileUpload({ files, onFileSelect, rowCounts }: FileUploa
               {ACCEPTED_FILE_HINTS[table]}
             </span>
             {uploaded && (
-              <span className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+              <span
+                className={`mt-1 flex items-center gap-1 text-xs ${
+                  isReady ? "text-emerald-600" : "text-amber-600"
+                }`}
+              >
                 <FileText className="h-3 w-3" />
                 {file.name} ({count ?? 0}행)
               </span>
