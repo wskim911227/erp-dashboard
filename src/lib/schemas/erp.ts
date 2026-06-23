@@ -10,6 +10,7 @@ export const productSchema = z.object({
     .number()
     .int("재고는 정수여야 합니다")
     .nonnegative("재고는 0 이상이어야 합니다"),
+  status: z.string().optional(),
 });
 
 export const customerSchema = z.object({
@@ -24,11 +25,13 @@ export const orderSchema = z.object({
   order_id: z.string().min(1, "order_id는 필수입니다"),
   customer_id: z.string().min(1, "customer_id는 필수입니다"),
   order_date: z.string().min(1, "주문일은 필수입니다"),
-  status: z.enum(["completed", "pending", "cancelled", "shipped"], {
+  status: z.enum(["completed", "pending", "cancelled", "shipped", "returned"], {
     errorMap: () => ({
-      message: "status는 completed, pending, cancelled, shipped 중 하나여야 합니다",
+      message:
+        "status는 completed, pending, cancelled, shipped, returned 중 하나여야 합니다",
     }),
   }),
+  total_amount: z.coerce.number().nonnegative().optional(),
 });
 
 export const orderDetailSchema = z.object({

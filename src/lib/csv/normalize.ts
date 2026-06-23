@@ -13,6 +13,7 @@ const COLUMN_ALIASES: Record<TableName, Record<string, string>> = {
     cost: "cost",
     stock_qty: "stock_quantity",
     stock_quantity: "stock_quantity",
+    status: "status",
   },
   customers: {
     customer_id: "customer_id",
@@ -31,6 +32,8 @@ const COLUMN_ALIASES: Record<TableName, Record<string, string>> = {
     customer_id: "customer_id",
     order_date: "order_date",
     status: "status",
+    total_amount_krw: "total_amount",
+    total_amount: "total_amount",
   },
   order_details: {
     detail_id: "detail_id",
@@ -56,8 +59,9 @@ const STATUS_MAP: Record<string, string> = {
   주문접수: "pending",
   pending: "pending",
   취소: "cancelled",
-  반품: "cancelled",
+  반품: "returned",
   cancelled: "cancelled",
+  returned: "returned",
   canceled: "cancelled",
 };
 
@@ -146,6 +150,9 @@ export function normalizeRow(
   }
   if (table === "products") {
     normalized.product_id = normalizeId(normalized.product_id);
+    if (row.status != null && String(row.status).trim() !== "") {
+      normalized.status = String(row.status).trim();
+    }
   }
 
   return normalized;

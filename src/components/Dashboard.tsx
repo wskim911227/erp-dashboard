@@ -16,29 +16,33 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { DashboardData, formatCurrency, formatPercent } from "@/lib/analytics/kpis";
-import { TrendingUp, Users, Package, DollarSign } from "lucide-react";
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ef4444"];
 
-interface KPICardProps {
+interface SummaryCardProps {
   title: string;
   value: string;
   subtitle?: string;
-  icon: React.ReactNode;
-  color: string;
+  badge?: { label: string; type: "normal" | "caution" };
 }
 
-function KPICard({ title, value, subtitle, icon, color }: KPICardProps) {
+function SummaryCard({ title, value, subtitle, badge }: SummaryCardProps) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
-          {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
-        </div>
-        <div className={`rounded-lg p-2.5 ${color}`}>{icon}</div>
-      </div>
+    <div className="relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      {badge && (
+        <span
+          className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-xs font-semibold ${
+            badge.type === "normal"
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {badge.label}
+        </span>
+      )}
+      <p className="text-sm text-slate-500">{title}</p>
+      <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
     </div>
   );
 }
@@ -49,38 +53,80 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ data, aiInsights }: DashboardProps) {
-  const { sales, profitability, customers, inventory } = data;
+  const { overview, sales, profitability, customers, inventory } = data;
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KPICard
-          title="총 매출"
-          value={formatCurrency(sales.totalRevenue)}
-          subtitle={`${sales.completedOrders}건 완료`}
-          icon={<DollarSign className="h-5 w-5 text-blue-600" />}
-          color="bg-blue-100"
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard
+          title="유효매출"
+          value={formatCurrency(overview.validRevenue)}
+          subtitle={`유효주문 ${overview.validOrderCount.toLocaleString()}건`}
         />
-        <KPICard
+        <SummaryCard title="매출원가" value={formatCurrency(overview.totalCost)} />
+        <SummaryCard title="매출총이익" value={formatCurrency(overview.grossProfit)} />
+        <SummaryCard
           title="매출총이익률"
-          value={formatPercent(profitability.grossMargin)}
-          subtitle={formatCurrency(profitability.grossProfit)}
-          icon={<TrendingUp className="h-5 w-5 text-emerald-600" />}
-          color="bg-emerald-100"
+          value={formatPercent(overview.grossMargin)}
+          badge={{
+            label: overview.grossMarginStatus === "normal" ? "정상" : "주의",
+            type: overview.grossMarginStatus,
+          }}
         />
-        <KPICard
+        <SummaryCard
+          title="평균 주문금액"
+          value={formatCurrency(overview.averageOrderValue)}
+        />
+        <SummaryCard
+          title="판매 수량"
+          value={`${overview.totalQuantitySold.toLocaleString()}개`}
+        />
+        <SummaryCard
+          title="취소율"
+          value={formatPercent(overview.cancellationRate)}
+          subtitle={formatCurrency(overview.cancellationAmount)}
+          badge={{
+            label: overview.cancellationStatus === "normal" ? "정상" : "주의",
+            type: overview.cancellationStatus,
+          }}
+        />
+        <SummaryCard
+          title="반품율"
+          value={formatPercent(overview.returnRate)}
+          subtitle={formatCurrency(overview.returnAmount)}
+          badge={{
+            label: overview.returnStatus === "normal" ? "정상" : "주의",
+            type: overview.returnStatus,
+          }}
+        />
+        <SummaryCard
           title="활성 고객"
-          value={`${customers.activeCustomers}명`}
-          subtitle={`전체 ${customers.totalCustomers}명`}
-          icon={<Users className="h-5 w-5 text-violet-600" />}
-          color="bg-violet-100"
+          value={`${overview.activeCustomers.toLocaleString()}명`}
+          subtitle={`전체 ${overview.totalCustomers.toLocaleString()}명`}
         />
-        <KPICard
-          title="재고 자산"
-          value={formatCurrency(inventory.totalStockValue)}
-          subtitle={`${inventory.totalSKUs} SKU · 회전율 ${inventory.inventoryTurnover.toFixed(1)}`}
-          icon={<Package className="h-5 w-5 text-amber-600" />}
-          color="bg-amber-100"
+        <SummaryCard
+          title="재고 위험"
+          value={`${overview.inventoryRiskCount}건`}
+          subtitle="재고 50개 이하 품목"
+          badge={
+            overview.inventoryRiskCount > 0
+              ? { label: "주의", type: "caution" }
+              : { label: "정상", type: "normal" }
+          }
+        />
+        <SummaryCard
+          title="단종 상품"
+          value={`${overview.discontinuedProductCount}건`}
+          badge={
+            overview.discontinuedProductCount > 0
+              ? { label: "주의", type: "caution" }
+              : { label: "정상", type: "normal" }
+          }
+        />
+        <SummaryCard
+          title="총 거래액"
+          value={formatCurrency(overview.totalTransactionVolume)}
+          subtitle="취소·반품 포함"
         />
       </div>
 
@@ -187,7 +233,7 @@ export default function Dashboard({ data, aiInsights }: DashboardProps) {
             저재고 알림 ({inventory.lowStockItems.length}건)
           </h3>
           <div className="flex flex-wrap gap-2">
-            {inventory.lowStockItems.map((item) => (
+            {inventory.lowStockItems.slice(0, 20).map((item) => (
               <span
                 key={item.name}
                 className="rounded-full bg-white px-3 py-1 text-sm text-amber-900 shadow-sm"

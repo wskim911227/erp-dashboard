@@ -40,7 +40,30 @@ export interface InventoryKPIs {
   inventoryTurnover: number;
 }
 
+export interface OverviewKPIs {
+  validRevenue: number;
+  validOrderCount: number;
+  totalCost: number;
+  grossProfit: number;
+  grossMargin: number;
+  grossMarginStatus: "normal" | "caution";
+  averageOrderValue: number;
+  totalQuantitySold: number;
+  cancellationRate: number;
+  cancellationAmount: number;
+  cancellationStatus: "normal" | "caution";
+  returnRate: number;
+  returnAmount: number;
+  returnStatus: "normal" | "caution";
+  activeCustomers: number;
+  totalCustomers: number;
+  inventoryRiskCount: number;
+  discontinuedProductCount: number;
+  totalTransactionVolume: number;
+}
+
 export interface DashboardData {
+  overview: OverviewKPIs;
   sales: SalesKPIs;
   profitability: ProfitabilityKPIs;
   customers: CustomerKPIs;
@@ -53,6 +76,17 @@ function formatMonth(dateStr: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const VALID_STATUSES = new Set(["completed", "shipped", "pending"]);
+const INVENTORY_RISK_THRESHOLD = 50;
+
+function marginStatus(margin: number): "normal" | "caution" {
+  return margin >= 25 ? "normal" : "caution";
+}
+
+function rateStatus(rate: number, cautionAbove: number): "normal" | "caution" {
+  return rate <= cautionAbove ? "normal" : "caution";
+}
+
 export function computeDashboard(
   products: Product[],
   customers: Customer[],
@@ -63,8 +97,30 @@ export function computeDashboard(
   const customerMap = new Map(customers.map((c) => [c.customer_id, c]));
   const orderMap = new Map(orders.map((o) => [o.order_id, o]));
 
+  const orderLineTotal = new Map<string, number>();
+  orderDetails.forEach((d) => {
+    orderLineTotal.set(
+      d.order_id,
+      (orderLineTotal.get(d.order_id) ?? 0) + d.quantity * d.unit_price
+    );
+  });
+
+  function orderAmount(orderId: string): number {
+    const order = orderMap.get(orderId);
+    if (order?.total_amount != null && order.total_amount > 0) {
+      return order.total_amount;
+    }
+    return orderLineTotal.get(orderId) ?? 0;
+  }
+
   const completedOrderIds = new Set(
-    orders.filter((o) => o.status === "completed" || o.status === "shipped").map((o) => o.order_id)
+    orders
+      .filter((o) => o.status === "completed" || o.status === "shipped")
+      .map((o) => o.order_id)
+  );
+
+  const validOrderIds = new Set(
+    orders.filter((o) => VALID_STATUSES.has(o.status)).map((o) => o.order_id)
   );
 
   const lineItems = orderDetails
@@ -162,7 +218,73 @@ export function computeDashboard(
     products.reduce((s, p) => s + p.stock_quantity * p.cost, 0) / Math.max(products.length, 1);
   const inventoryTurnover = avgInventoryValue > 0 ? totalCost / avgInventoryValue : 0;
 
+  let validRevenue = 0;
+  let cancellationAmount = 0;
+  let returnAmount = 0;
+  let totalTransactionVolume = 0;
+  let validOrderCount = 0;
+  const activeCustomerIds = new Set<string>();
+
+  orders.forEach((order) => {
+    const amount = orderAmount(order.order_id);
+    totalTransactionVolume += amount;
+
+    if (VALID_STATUSES.has(order.status)) {
+      validRevenue += amount;
+      validOrderCount += 1;
+      activeCustomerIds.add(order.customer_id);
+    } else if (order.status === "cancelled") {
+      cancellationAmount += amount;
+    } else if (order.status === "returned") {
+      returnAmount += amount;
+    }
+  });
+
+  let totalQuantitySold = 0;
+  let validCost = 0;
+  orderDetails.forEach((d) => {
+    if (!validOrderIds.has(d.order_id)) return;
+    const product = productMap.get(d.product_id);
+    totalQuantitySold += d.quantity;
+    validCost += product ? d.quantity * product.cost : 0;
+  });
+
+  const grossProfit = validRevenue - validCost;
+  const grossMargin = validRevenue > 0 ? (grossProfit / validRevenue) * 100 : 0;
+  const cancellationRate =
+    totalTransactionVolume > 0 ? (cancellationAmount / totalTransactionVolume) * 100 : 0;
+  const returnRate =
+    totalTransactionVolume > 0 ? (returnAmount / totalTransactionVolume) * 100 : 0;
+
+  const inventoryRiskCount = products.filter(
+    (p) => p.status !== "단종" && p.stock_quantity <= INVENTORY_RISK_THRESHOLD
+  ).length;
+  const discontinuedProductCount = products.filter((p) => p.status === "단종").length;
+
+  const overview: OverviewKPIs = {
+    validRevenue,
+    validOrderCount,
+    totalCost: validCost,
+    grossProfit,
+    grossMargin,
+    grossMarginStatus: marginStatus(grossMargin),
+    averageOrderValue: validOrderCount > 0 ? validRevenue / validOrderCount : 0,
+    totalQuantitySold,
+    cancellationRate,
+    cancellationAmount,
+    cancellationStatus: rateStatus(cancellationRate, 10),
+    returnRate,
+    returnAmount,
+    returnStatus: rateStatus(returnRate, 5),
+    activeCustomers: activeCustomerIds.size,
+    totalCustomers: customers.length,
+    inventoryRiskCount,
+    discontinuedProductCount,
+    totalTransactionVolume,
+  };
+
   return {
+    overview,
     sales: {
       totalRevenue,
       totalOrders: orders.length,
@@ -202,7 +324,7 @@ export function computeDashboard(
     },
     customers: {
       totalCustomers: customers.length,
-      activeCustomers: customerRevenue.size,
+      activeCustomers: activeCustomerIds.size,
       customersBySegment: Array.from(segmentStats.entries())
         .map(([segment, v]) => ({ segment, count: v.count, revenue: v.revenue }))
         .sort((a, b) => b.revenue - a.revenue),

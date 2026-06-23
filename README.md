@@ -98,7 +98,18 @@ npm run dev
 
 **샘플 데이터 불러오기** 버튼을 누르면 위 4개 파일을 자동 로드하고 전체 분석이 바로 시작됩니다.
 
-## 기술 스택
+## 배포 속도 (Next.js vs HTML/JS)
+
+이 프로젝트는 **Nuxt가 아닌 Next.js**입니다. Vercel 배포가 느린 주된 이유는:
+
+- `sample-data/` 대용량 CSV (~2만 행) 포함
+- Next.js 프로덕션 빌드 + TypeScript 컴파일
+
+**순수 HTML/JS만으로는 어렵습니다.** Gemini API 키는 서버에서만 호출해야 하므로, 최소한 API 서버(Vercel Functions 등)가 필요합니다.
+
+배포 속도 개선 팁:
+- Vercel **Production** 배포만 사용 (Preview 배포 줄이기)
+- `sample-data`를 Git LFS 또는 외부 URL로 분리하면 빌드 크기 감소
 
 - Next.js 15, TypeScript, Tailwind CSS
 - Zod (스키마 검증)
