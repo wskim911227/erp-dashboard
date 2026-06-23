@@ -47,45 +47,54 @@ npm run dev
 
 ## CSV 파일 형식
 
+앱은 아래 컬럼명을 자동 인식·매핑합니다. 표준 컬럼명도 그대로 사용 가능합니다.
+
 ### products.csv
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | product_id | string | 상품 ID (PK) |
-| name | string | 상품명 |
+| product_name | string | 상품명 |
 | category | string | 카테고리 |
-| price | number | 판매가 |
-| cost | number | 원가 |
-| stock_quantity | integer | 재고 수량 |
+| unit_price_krw | number | 판매가 |
+| unit_cost_krw | number | 원가 |
+| stock_qty | integer | 재고 수량 |
 
 ### customers.csv
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | customer_id | string | 고객 ID (PK) |
-| name | string | 고객명 |
+| customer_name | string | 고객명 |
 | email | string | 이메일 |
-| segment | string | 세그먼트 |
-| region | string | 지역 |
+| customer_type | string | 고객 유형 (세그먼트) |
+| city | string | 지역 |
 
-### orders.csv
+### sales_orders.csv
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| order_id | string | 주문 ID (PK) |
+| order_no | string | 주문 ID (PK) |
 | customer_id | string | 고객 ID (FK) |
 | order_date | string | 주문일 (YYYY-MM-DD) |
-| status | enum | completed / pending / cancelled / shipped |
+| status | string | 배송완료 / 결제완료 / 배송중 / 주문접수 / 취소 / 반품 |
 
-### order_details.csv
+### sales_order_items.csv
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| detail_id | string | 상세 ID (PK) |
-| order_id | string | 주문 ID (FK) |
+| order_item_id | string | 상세 ID (PK) |
+| order_no | string | 주문 ID (FK) |
 | product_id | string | 상품 ID (FK) |
-| quantity | integer | 수량 |
-| unit_price | number | 단가 |
+| qty | integer | 수량 |
+| unit_price_krw | number | 단가 |
 
 ## 샘플 데이터
 
-`sample-data/` 폴더에 테스트용 CSV 4개가 포함되어 있습니다.
+`sample-data/` 폴더에 실제 ERP 형식 테스트용 CSV 4개가 포함되어 있습니다.
+
+| 파일 | 행 수 |
+|------|-------|
+| products.csv | 1,000 |
+| customers.csv | 2,000 |
+| sales_orders.csv | 5,000 |
+| sales_order_items.csv | 14,974 |
 
 ## 기술 스택
 
