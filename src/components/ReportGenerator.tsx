@@ -22,7 +22,7 @@ export default function ReportGenerator({
     if (!report) return;
     setDownloading("pdf");
     try {
-      downloadReportPDF(report, dashboard);
+      await downloadReportPDF(report, dashboard);
     } finally {
       setDownloading(null);
     }
