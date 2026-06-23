@@ -1,0 +1,11 @@
+customer_id,name,email,segment,region
+C001,김영수,kim@example.com,Enterprise,서울
+C002,이민정,lee@example.com,SMB,부산
+C003,박준호,park@example.com,Enterprise,서울
+C004,최수연,choi@example.com,Consumer,대구
+C005,정다은,jung@example.com,SMB,인천
+C006,한지훈,han@example.com,Enterprise,서울
+C007,윤서연,yoon@example.com,Consumer,광주
+C008,강민수,kang@example.com,SMB,대전
+C009,조현아,jo@example.com,Enterprise,서울
+C010,임태양,lim@example.com,Consumer,울산
